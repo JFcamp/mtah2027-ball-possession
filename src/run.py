@@ -56,6 +56,7 @@ def write_csv(path: str, labels: np.ndarray) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, help="CSV to write, e.g. submissions/v1.csv")
+    parser.add_argument("--version", default="v1", choices=("v1",), help="pipeline generation")
     args = parser.parse_args(argv)
     result = build()
     write_csv(args.out, result.labels)

@@ -1,6 +1,9 @@
 # branca analytics: ball possession, Phase 1
 
-Status: skeleton plus what v1 (E3) decided. Sections marked TODO are filled in later stages.
+Status: describes the pipeline v1 (the submitted file at this point). Public 5-minute window,
+reported only and never used to choose anything: macroF1 0.751, spellF1 0.432 (bootstrap 5-95%:
+0.28 to 0.57, 17 possessions, so it is not distinguishable from the best baseline). Whole match:
+339 possessions, mean 11.1 s, 33.9% H / 25.4% A / 40.7% D of the graded frames.
 
 ## 1. Approach and why
 
@@ -67,7 +70,8 @@ Full list of thresholds and their justification: module docstrings of `src/ball.
   restart is located from the ball only when it is seen. Restart times can be off by seconds.
 - The Smart Tagging `Team` of corners is not confirmed by the tracking (the first controller after a
   corner is the tagged team in 3 of 10 cases); it is used as given.
-- TODO: evaluate and reduce these on the full match without labels (consistency checks only).
+- Next version (v2) replaces the pace rule R5 and the fixed look-back caps with a model of live /
+  stopped play trained on algorithmic pseudo-labels; see the later sections once it is decided.
 
 ## 6. Reproduction
 

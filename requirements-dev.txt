@@ -1,2 +1,2 @@
-# Test runner (python -m pytest). The pipeline itself needs only requirements.txt.
-pytest
+-r requirements.txt
+pytest==9.2.0
