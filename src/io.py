@@ -1,4 +1,4 @@
-﻿"""Reading the match data: tracking (ATD), Smart Tagging and the graded-frame mask.
+"""Reading the match data: tracking (ATD), Smart Tagging and the graded-frame mask.
 
 Everything here is indexed by *video frame* (0 ... N-1), the same index as a submission row:
 video_frame = ATD frame_id - 1. Positions are in metres on the pitch of games.GAMES["BAR-ATH"].
@@ -48,15 +48,15 @@ class Interval(NamedTuple):
     tags: Dict[str, str]
 
 
-def _parse_atd(raw_path: str, team_of_slot: np.ndarray) -> Tracking:
+def _parse_atd(raw_path: str, team_of_slot: np.ndarray, n_frames: int = N_FRAMES) -> Tracking:
     n_slots = len(team_of_slot)
     length, width = PITCH
     scale = np.array([length, width])
 
-    ball = np.full((N_FRAMES, 2), np.nan)
-    players = np.full((N_FRAMES, n_slots, 2), np.nan)
-    speed = np.full((N_FRAMES, n_slots), np.nan)
-    seen = np.zeros(N_FRAMES, dtype=bool)
+    ball = np.full((n_frames, 2), np.nan)
+    players = np.full((n_frames, n_slots, 2), np.nan)
+    speed = np.full((n_frames, n_slots), np.nan)
+    seen = np.zeros(n_frames, dtype=bool)
 
     with open(raw_path) as handle:
         for line in handle:
@@ -64,8 +64,8 @@ def _parse_atd(raw_path: str, team_of_slot: np.ndarray) -> Tracking:
             if len(parts) != 3:
                 continue
             frame = int(parts[0]) - 1  # frame_id counts from 1, video frames from 0
-            if not 0 <= frame < N_FRAMES:
-                raise ValueError("frame_id {} outside 1..{}".format(frame + 1, N_FRAMES))
+            if not 0 <= frame < n_frames:
+                raise ValueError("frame_id {} outside 1..{}".format(frame + 1, n_frames))
 
             group = np.fromstring(parts[1].replace(";", ",").strip(), sep=",")
             if group.size != 3 * n_slots:

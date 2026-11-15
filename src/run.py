@@ -42,14 +42,24 @@ def build(version: str = "v1", use_cache: bool = True) -> Pipeline:
     """v1: dead-ball rules R1-R6. v2: R5 and the look-back / stoppage caps are replaced by a model
     of live / stopped play (player features, trained on pseudo-labels) decoded with an HMM."""
     tracking = sio.load_tracking(use_cache=use_cache)
+    fused = None
+    if version == "v3":
+        # v1 pipeline unchanged, with the tactical ball completed by the aligned broadcast ball.
+        from . import align as alignmod
+        from . import broadcast as bcast
+        from . import fusion
+        broadcast = bcast.load_tracking(use_cache=use_cache)
+        fused = fusion.fuse_ball(tracking.ball_xy, broadcast.ball_xy,
+                                 alignmod.align(broadcast, None, tracking, use_cache=use_cache))
+        tracking = tracking._replace(ball_xy=fused.ball_xy)
     intervals = sio.load_smart_tagging()
     track = ballmod.clean_ball(tracking.ball_xy)
     features, table = feat.compute_features(tracking, track, intervals)
     dead = db.build(track, features, intervals)
-    extra = {"dead_v1": dead}
+    extra = {"dead_v1": dead, "fused": fused}
     if version == "v2":
         dead, extra = _dead_v2(tracking, track, features, intervals, dead)
-    elif version != "v1":
+    elif version not in ("v1", "v3"):
         raise ValueError("unknown version {!r}".format(version))
     pre, segments = pos.assign(dead, features, track)
     labels = post.finalize(pre, sio.graded_mask())
@@ -89,7 +99,7 @@ def write_csv(path: str, labels: np.ndarray) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, help="CSV to write, e.g. submissions/v1.csv")
-    parser.add_argument("--version", default="v1", choices=("v1", "v2"), help="pipeline generation")
+    parser.add_argument("--version", default="v1", choices=("v1", "v2", "v3"), help="pipeline generation")
     args = parser.parse_args(argv)
     result = build(args.version)
     write_csv(args.out, result.labels)

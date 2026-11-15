@@ -32,7 +32,7 @@ there is no labelled data we may use (see section 3), the rules are the definiti
 | tactical Smart Tagging | set-piece and goal anchors (start, team), phase tags as a weak possession cue |
 | tactical homography | not used in v1 |
 | tactical / broadcast video | not used (not available locally in v1) |
-| broadcast ATD / homography | not used: not synchronised with the tactical timeline |
+| broadcast ATD / homography | tried in v3 (ball fusion) and not kept: aligned to the tactical timeline by player positions only (91% of the valid broadcast frames), but it adds only 3.9 points of ball coverage |
 
 Dropped and why: the ATD `speed` field is not used for the activity measure (it was checked against
 positions: same unit, ratio 0.99, but positions give a smoothing we control).
@@ -91,6 +91,29 @@ submitted version. The whole-match statistics of v2 were plausible (39.9% D, 301
 long unexplained stoppage). v2 is kept in the repository (`--version v2`, `submissions/v2.csv`)
 and its report is `docs/report_v2.md`. The public window was reported only and played no part in
 the decision.
+
+## 5c. Error analysis and broadcast ball fusion (v3), discarded
+
+`docs/error_analysis_v1.md` compares v1 with the public 5 minutes (read only to understand the cases,
+no threshold changed). Main findings: the missed dead-ball frames are mostly frames where the ball is
+visible and moving but nobody controls it (67%) or a team controls it (23%), and only 8% are frames
+without a ball; possession switches are missed or shifted mostly because the new team controlled the
+ball for at least 0.5 s earlier or later than the predicted switch, or only touched it briefly.
+
+v3 completes the tactical ball with the broadcast ball. The broadcast frames are aligned to the
+tactical ones without the ball: for blocks of 250 frames the offset that makes the same-team player
+positions coincide (matching within 2.5 m) is searched around a coarse global estimate, and only
+blocks that match strongly and lie at the dominant offset of their half are kept (replays are left
+out). The offsets are constant to within a few frames (4014 in the first half, 26920 in the
+second); players agree to a median of 0.29 m. The fused ball goes through the same cleaning as
+before and the rest of v1 is unchanged.
+
+The decision rule was fixed before looking at any v3 score. (a) Co-visible ball distance: median
+0.79 m (limit 2 m) but p90 5.94 m (limit 5 m), fail. (b) Ball coverage on graded frames rose from
+59.3% to 63.2% (+3.9 points, limit 5), fail, because the broadcast tracker usually loses the ball
+where the tactical one does. (c) The whole-match statistics were plausible. v3 therefore did not
+replace v1. Reports: `docs/report_v3.md`; code: `src/broadcast.py`, `src/align.py`,
+`src/fusion.py`; `python -m src.run --version v3`.
 
 ## 6. Reproduction
 
