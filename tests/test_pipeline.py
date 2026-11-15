@@ -43,3 +43,11 @@ def test_same_input_same_bytes(result, tmp_path):
     assert digest(first) == digest(second)
     assert first.read_text().splitlines()[0] == "frame,label"
     assert len(first.read_text().splitlines()) == sio.N_FRAMES + 1
+
+
+def test_v2_is_deterministic_and_well_formed(tmp_path):
+    first, second = runner.build('v2'), runner.build('v2')
+    assert np.array_equal(first.labels, second.labels)
+    graded = sio.graded_mask()
+    assert (first.labels[~graded] == pos.X).all()
+    assert np.isin(first.labels[graded], [pos.H, pos.A, pos.D]).all()

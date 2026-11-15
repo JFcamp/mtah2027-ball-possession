@@ -73,6 +73,25 @@ Full list of thresholds and their justification: module docstrings of `src/ball.
 - Next version (v2) replaces the pace rule R5 and the fixed look-back caps with a model of live /
   stopped play trained on algorithmic pseudo-labels; see the later sections once it is decided.
 
+## 5b. v2 attempted and discarded (E4)
+
+v2 replaced the pace rule R5 and the fixed look-back / stoppage caps by a learned live/stopped model:
+algorithmic pseudo-labels (stopped: ball out for 1 s, ball still for 2 s, set-piece tag start to
+restart, goal to kick-off, opening of each half; live: ball inside, moving, someone controlling it),
+a numpy logistic regression on player-only features (speed percentiles, fraction walking/running,
+team centroid speed, compactness, acceleration, number tracked, over 1 s and 5 s windows) and a
+two-state Viterbi HMM with football-duration transitions (stopped 25 s, live 40 s on average).
+
+The decision rule was fixed before looking at any public score: v2 replaces v1 only if the model
+beats R5 on the pseudo-labels of the held-out half in both directions (AUC and balanced accuracy)
+and the whole-match statistics stay plausible. Result: AUC 0.898 vs 0.909 and balanced accuracy
+0.829 vs 0.833 when training on the 1st half and testing on the 2nd (R5 won); 0.920 vs 0.882 and
+0.845 vs 0.787 in the other direction (model won). The first direction failed, so v1 stays the
+submitted version. The whole-match statistics of v2 were plausible (39.9% D, 301 possessions, no
+long unexplained stoppage). v2 is kept in the repository (`--version v2`, `submissions/v2.csv`)
+and its report is `docs/report_v2.md`. The public window was reported only and played no part in
+the decision.
+
 ## 6. Reproduction
 
 ```bash
