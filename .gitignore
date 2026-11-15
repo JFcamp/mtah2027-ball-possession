@@ -67,3 +67,7 @@ env/
 _downloads/
 *.npy
 *.parquet
+
+# scored copies of intermediate submissions (the originals live in submissions/)
+evaluation/results/v[0-9]*.csv
+evaluation/results/branca*.csv
