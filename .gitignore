@@ -71,3 +71,6 @@ _downloads/
 # scored copies of intermediate submissions (the originals live in submissions/)
 evaluation/results/v[0-9]*.csv
 evaluation/results/branca*.csv
+
+# external validation data (public Metrica sample-data), never committed
+data_external/
