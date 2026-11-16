@@ -58,3 +58,10 @@ def test_v2_is_deterministic_and_well_formed(tmp_path):
     graded = sio.graded_mask()
     assert (first.labels[~graded] == pos.X).all()
     assert np.isin(first.labels[graded], [pos.H, pos.A, pos.D]).all()
+
+
+def test_v4_still_reproduces_the_submitted_file(tmp_path):
+    path = tmp_path / 'v4.csv'
+    runner.write_csv(str(path), runner.build('v4').labels)
+    assert hashlib.sha256(path.read_bytes()).hexdigest().upper() == (
+        '1CAA369C9258F02CA7337E75B5256B300205A476E1CAB666E29187F9326947BE')

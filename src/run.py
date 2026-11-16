@@ -42,6 +42,8 @@ class Pipeline(NamedTuple):
 def build(version: str = "v4", use_cache: bool = True) -> Pipeline:
     """v1: dead-ball rules R1-R6. v2: R5 and the look-back / stoppage caps are replaced by a model
     of live / stopped play (player features, trained on pseudo-labels) decoded with an HMM."""
+    if version == "v5":
+        return build_v5(load_v5_options(), use_cache)
     tracking = sio.load_tracking(use_cache=use_cache)
     fused = None
     if version == "v3":
@@ -80,6 +82,61 @@ def build(version: str = "v4", use_cache: bool = True) -> Pipeline:
             pre, segments = pos.assign(dead, features, track)
         labels = post.finalize(pre, sio.graded_mask(), cfg["min_poss"])
     return Pipeline(labels, pre, track, features, table, dead, segments, extra)
+
+
+V5_PATH = os.path.join(sio.ROOT, "models", "v5_config.json")
+
+
+def load_v5_options() -> dict:
+    """What v5 is made of (written by scripts/v5_decide.py from the decision criteria)."""
+    import json
+    with open(V5_PATH) as handle:
+        return json.load(handle)
+
+
+def v5_features(tracking, use_cache=True):
+    from . import features_v5
+    path = os.path.join(sio.CACHE_DIR, "bar_v5feat.npy")
+    if use_cache and os.path.isfile(path):
+        x = np.load(path)
+        if x.shape[0] == sio.N_FRAMES:
+            return x
+    x, _ = features_v5.compute(tracking.players_xy, tracking.team_of_slot)
+    if use_cache:
+        os.makedirs(sio.CACHE_DIR, exist_ok=True)
+        np.save(path, x)
+    return x
+
+
+def build_v5(opts: dict, use_cache: bool = True) -> Pipeline:
+    """v5: v4 + (as decided) a better stopped-ball model on EVERY graded frame, a decoder, a possession
+    configuration robust to noise and a pass-chain veto. `opts`: model (path), decoder, possession,
+    all_frames, veto, short_model (path or None)."""
+    from . import decode_v5, models_v5, veto as vetomod
+    tracking = sio.load_tracking(use_cache=use_cache)
+    intervals = sio.load_smart_tagging()
+    track = ballmod.clean_ball(tracking.ball_xy)
+    features, table = feat.compute_features(tracking, track, intervals)
+    cfg = opts["possession"]
+    x = v5_features(tracking, use_cache)
+    model = models_v5.load(os.path.join(sio.ROOT, opts["model"]))
+    short = models_v5.load(os.path.join(sio.ROOT, opts["short_model"])) if opts.get("short_model") else None
+    d = opts["decoder"]
+    p = models_v5.predict(model, x)
+    ps = models_v5.predict(short, x) if short is not None else None
+    stopped = decode_v5.decode(p, sio.half_blocks(), d["threshold"], d["min_stop"], d["close_gap"],
+                               d["refine"], ps)
+    if opts.get("veto"):
+        stopped &= ~vetomod.chain_veto(track, features, cfg)
+    if opts.get("all_frames", True):
+        dead = db.build(track, features, intervals, r5_stopped=np.zeros(sio.N_FRAMES, dtype=bool),
+                        extra_dead=stopped)
+    else:
+        dead = db.build(track, features, intervals, r5_stopped=stopped)
+    with calibration.configured(cfg):
+        pre, segments = pos.assign(dead, features, track)
+    labels = post.finalize(pre, sio.graded_mask(), cfg["min_poss"])
+    return Pipeline(labels, pre, track, features, table, dead, segments, {"stopped": stopped, "p": p})
 
 
 # Possession configuration chosen on the external games (scripts/possession_sweep.py, selection by
@@ -138,7 +195,7 @@ def write_csv(path: str, labels: np.ndarray) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, help="CSV to write, e.g. submissions/v1.csv")
-    parser.add_argument("--version", default="v4", choices=("v1", "v2", "v3", "v4", "v4b", "v4c"), help="pipeline generation")
+    parser.add_argument("--version", default="v4", choices=("v1", "v2", "v3", "v4", "v4b", "v4c", "v5"), help="pipeline generation")
     args = parser.parse_args(argv)
     result = build(args.version)
     write_csv(args.out, result.labels)

@@ -1,4 +1,4 @@
-﻿"""Dead-ball mask: frames in which the ball is out of play (label D).
+"""Dead-ball mask: frames in which the ball is out of play (label D).
 
 Six rules, each producing its own mask so the report can say how many frames came from where:
 
@@ -122,7 +122,7 @@ def _side(tag, sides):
     return sides.get(tag)
 
 
-def build(track, features: feat.Features, intervals, r5_stopped=None) -> DeadBall:
+def build(track, features: feat.Features, intervals, r5_stopped=None, extra_dead=None) -> DeadBall:
     """Dead-ball mask. `r5_stopped` ([N] bool, optional) replaces the pace test of rule R5: inside a
     ball gap of at least 5 s a frame is dead where it is True (v4 passes a model's decision)."""
     n = sio.N_FRAMES
@@ -232,6 +232,8 @@ def build(track, features: feat.Features, intervals, r5_stopped=None) -> DeadBal
     union = np.zeros(n, dtype=bool)
     for r in RULES:
         union |= masks[r]
+    if extra_dead is not None:   # v5: a model's stopped mask on every graded frame, ORed before the 2 s filter
+        union |= extra_dead & graded
     final = np.zeros(n, dtype=bool)
     for a, b in runs(union):
         if b - a >= MIN_DEAD:
