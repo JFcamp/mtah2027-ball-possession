@@ -68,6 +68,12 @@ decision rules fixed beforehand; the public score is only reported.
   (b) select the possession configuration (324 configurations; chosen on two games, tested on the third,
   with the true ball and with 40% of the live-play ball frames erased in long gaps, E2 gap
   distribution); (c) compare the model with the pace rule it replaces, leave-one-game-out.
+- **Degraded copies (v5 attempt, not in the submitted file).** To test robustness, the external games were also
+  degraded towards BAR-ATH statistics measured without labels (`src/degrade.py`, `docs/domain_gap.md`): smooth
+  position errors of 0.17 m (players) and 0.47 m (ball), the dropout pattern of the tracked players
+  (mean 20.5, sd 3.3), and the ball erased in 10.6% (the share of v4's H/A frames without a ball) or 40% of the live
+  frames. Wrong-ball episodes were not simulated (they cannot be estimated reliably). The model features of the clean
+  games were already close to BAR-ATH (mean absolute standardised difference 0.116; 0.108 after degrading).
 - **Definition differences from `CHALLENGE.md`:** (1) possession here is "last ball event" (a touch),
   not controlled possession; a recovery lost at once counts as a change. (2) The external tracking is
   corrected, BAR-ATH's is automatic: noisier positions and speeds. (3) In the external games the dead
@@ -129,6 +135,16 @@ R5 ball untracked for 5 s or more: D where the model says P(stopped) >= 0.5 (v1:
   coverage +5 points. Median 0.79 m, but p90 5.94 m, and coverage rose only from 59.3% to 63.2% (+3.9),
   because the broadcast tracker loses the ball where the tactical one does.
 
+- **v5, calibration under degradation (E6), v4 kept.** Four pre-registered checks on the external games. (B) A
+  possession configuration chosen on two games lost to v4 on the third (game 1: 0.695 vs 0.700 with 10.6% ball loss), so
+  the v4 configuration stays; the radius 1.0 m was the best of 0.75-2.5 m in all three selections. (C) A gradient-boosting
+  model on 65 features passed (degraded AUC 0.919 / 0.955 / 0.957 against 0.913 / 0.946 / 0.934 for the v4 model) but the
+  end-to-end check on the complete pipeline failed on two held-out games (differences of 0.0004 in DEG_BAR and 0.011 in
+  DEG_40), so the v4 model and decoder stay. (D) Applying the v4 model to every frame failed the transfer test on
+  algorithmic weak labels of BAR-ATH (mean hit rate over the stoppage sources 0.67 < 0.70; it misses the half openings,
+  0.43). The unused gradient-boosting model reached AUC 0.973 and mean hit 0.757 on the same labels. Decisions:
+  `docs/decision_v5.md`; code: `src/lab.py`, `src/features_v5.py`, `src/models_v5.py`, `src/decode_v5.py`.
+
 ## 7. Results
 
 External games, true dead-ball mask (spellF1, game 1 / 2 / 3):
@@ -156,7 +172,13 @@ two differ on 9.07% of the graded frames. Public window: v1 macroF1 0.751, spell
   possession 25 frames are the lowest values tried; the grid was not extended, so the optimum may lie
   beyond.
 - **Transfer risk:** the radius of 1.0 m and the model were validated on corrected tracking; BAR-ATH is
-  automatic and noisier, so a 1.0 m radius may be too tight there. We did not test it with simulated noise.
+  automatic, so a 1.0 m radius may be too tight there. A simulated degradation (smooth errors of 0.17 m, player
+  dropouts, 10.6% or 40% of the live ball erased) did not favour a larger radius: 1.0 m was chosen in all three
+  cross-game selections. The degradation itself rests on the disagreement between the two BAR-ATH cameras and cannot
+  be validated against the true error of the tracker.
+- **Known weakness of the stopped-ball model:** on algorithmic weak labels of BAR-ATH the v4 model finds only 43% of the
+  frames before the opening kick-off of each half and 67% on average over four stoppage sources (v5 analysis, `docs/decision_v5.md`).
+  A better model existed (see section 6) but did not pass the pre-registered end-to-end check.
 - The external labels are event-based, the BAR-ATH ones tracking-based (section 4); the model's stopped
   label (ball absent) also differs from BAR-ATH's dead ball.
 - Stoppage starts rely on the Smart Tagging, itself automatic; the restart is found from the ball only

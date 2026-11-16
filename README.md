@@ -42,8 +42,8 @@ python evaluation/validate_submission.py "submissions/branca analytics.csv"
 ```
 
 The output is deterministic: two runs produce byte-identical files (`tests/test_pipeline.py`).
-`--version v1|v2|v3|v4` select the pipeline generation (see `docs/`); the default, v4, is the one
-that produced the submitted file (`--version v1` reproduces the earlier safety submission). v3 also
+`--version v1|v2|v3|v4|v5` select the pipeline generation (see `docs/`); the default, v4, is the one
+that produced the submitted file (`--version v1` reproduces the earlier safety submission; `--version v5` currently equals v4, no v5 component passed its criterion, see `docs/decision_v5.md`). v3 also
 reads `data/broadcast/`. v4 uses the stopped-ball model `models/dead_model.json`, trained on the
 public Metrica sample games (regenerate: clone https://github.com/metrica-sports/sample-data into
 `data_external/sample-data`, then `python scripts/train_dead_model.py`).
