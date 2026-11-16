@@ -43,7 +43,10 @@ def build(version: str = "v4", use_cache: bool = True) -> Pipeline:
     """v1: dead-ball rules R1-R6. v2: R5 and the look-back / stoppage caps are replaced by a model
     of live / stopped play (player features, trained on pseudo-labels) decoded with an HMM."""
     if version == "v5":
-        return build_v5(load_v5_options(), use_cache)
+        opts = load_v5_options()
+        if opts is not None:
+            return build_v5(opts, use_cache)
+        version = "v4"     # no component of v5 passed its criterion: v5 is v4 (see docs/decision_v5.md)
     tracking = sio.load_tracking(use_cache=use_cache)
     fused = None
     if version == "v3":
@@ -88,8 +91,10 @@ V5_PATH = os.path.join(sio.ROOT, "models", "v5_config.json")
 
 
 def load_v5_options() -> dict:
-    """What v5 is made of (written by scripts/v5_decide.py from the decision criteria)."""
+    """What v5 is made of (written by scripts/v5_decide.py from the decision criteria); None if nothing passed."""
     import json
+    if not os.path.isfile(V5_PATH):
+        return None
     with open(V5_PATH) as handle:
         return json.load(handle)
 

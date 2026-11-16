@@ -13,6 +13,7 @@ E2E: the new pipeline must beat the v4-like pipeline (L0 trained on a+b, thresho
 v4 configuration) on t in DEG_BAR and DEG_40, in all three combinations.
 """
 
+import argparse
 import itertools
 import json
 import os
@@ -44,7 +45,36 @@ DECODERS = [dict(threshold=t, min_stop=m, close_gap=c, refine=r)
 V4_DECODER = dict(threshold=0.5, min_stop=50, close_gap=0, refine=False)
 
 
+def combine():
+    """Merge the per-fold files: E2E and the decoder chosen on the three games (each game scored by the model
+    trained on the other two, which is exactly the fold-test probability)."""
+    folds = {}
+    objs = []
+    for k in range(3):
+        part = json.load(open(os.path.join(CACHE, "v5_decoder_fold{}.json".format(k))))
+        folds[part["test"]] = part["fold"]
+        objs.append(part["own_objective"])
+    obj = np.mean(objs, axis=0)
+    order = sorted(range(len(DECODERS)), key=lambda i: (-round(float(obj[i]), 9), i))
+    games, names = v5m.load_games()
+    xs, ys = v5m.training_set(games, list(games), "L1")
+    m5.save(m5.train("L1", xs, ys, f5.short_columns(names), 2), os.path.join(CACHE, "final_short.json"))
+    first = json.load(open(os.path.join(CACHE, "v5_decoder_fold0.json")))
+    result = {"model_kind": first["model_kind"], "config": first["config"], "folds": folds,
+              "final_decoder": DECODERS[order[0]], "final_objective": float(obj[order[0]]),
+              "e2e_pass": all(f["pass"] for f in folds.values())}
+    with open(os.path.join(CACHE, "v5_decoder.json"), "w") as handle:
+        json.dump(result, handle, indent=1)
+    print("final", result["final_decoder"], "E2E", result["e2e_pass"])
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fold", type=int, help="0, 1 or 2: hold out that game")
+    parser.add_argument("--combine", action="store_true")
+    args = parser.parse_args()
+    if args.combine:
+        return combine()
     model_info = json.load(open(os.path.join(CACHE, "v5_model.json")))
     kind = model_info["chosen"]
     b_info = json.load(open(os.path.join(CACHE, "v5_b.json")))
@@ -97,7 +127,7 @@ def main():
 
     result = {"model_kind": kind, "config": cfg, "folds": {}}
     with cal.cached_episodes():
-        for test in gnames:
+        for test in [gnames[args.fold]]:
             a, b = [n for n in gnames if n != test]
             obj = []
             for dec in DECODERS:
@@ -117,25 +147,15 @@ def main():
                                      "v4_like": old, "pass": all(new[c] > old[c] for c in new)}
             print(test, result["folds"][test], flush=True)
 
-        # final decoder on all three games, each scored by a model trained on the other two
-        obj = []
+        # objective of every decoder on THIS game, scored with the model trained on the other two
+        own = []
         for dec in DECODERS:
-            vals = []
-            for n in gnames:
-                others = tuple(m for m in gnames if m != n)
-                p, ps = probs(n, others, kind)
-                s = spell(n, p, ps, dec, cfg)
-                vals += [s["DEG_BAR"], s["DEG_40"]]
-            obj.append(float(np.mean(vals)))
-        order = sorted(range(len(DECODERS)), key=lambda i: (-round(obj[i], 9), i))
-        result["final_decoder"] = DECODERS[order[0]]
-        result["final_objective"] = obj[order[0]]
-        result["e2e_pass"] = all(f["pass"] for f in result["folds"].values())
-    xs, ys = v5m.training_set(games, gnames, "L1")
-    m5.save(m5.train("L1", xs, ys, short_cols, 2), os.path.join(CACHE, "final_short.json"))
-    with open(os.path.join(CACHE, "v5_decoder.json"), "w") as handle:
-        json.dump(result, handle, indent=1)
-    print("final", result["final_decoder"], "E2E", result["e2e_pass"])
+            s_ = spell(test, p, ps, dec, cfg)
+            own.append(float(np.mean([s_["DEG_BAR"], s_["DEG_40"]])))
+    with open(os.path.join(CACHE, "v5_decoder_fold{}.json".format(args.fold)), "w") as handle:
+        json.dump({"test": test, "fold": result["folds"][test], "own_objective": own,
+                   "model_kind": kind, "config": cfg}, handle, indent=1)
+    print("fold", args.fold, "done")
 
 
 if __name__ == "__main__":

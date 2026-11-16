@@ -97,13 +97,19 @@ def main():
     t1l = D["D"]["T1_L0"]
     L += ["The v4 model (L0) under the same test: AUC {}, mean hit {}, false stopped {} ({}).".format(
         f(t1l["auc"], 3), f(t1l["mean_hit"], 3), f(t1l["false_stop_live"], 3), yn(t1l["pass"])), ""]
+    t1g = D["D"]["T1_G1_info"]
+    L += ["For information only (the gradient-boosting model G1 was not used because the end-to-end check failed): "
+          "AUC {}, mean hit {}, false stopped {}, BUILD UP {}.".format(f(t1g["auc"], 3), f(t1g["mean_hit"], 3),
+                                                                  f(t1g["false_stop_live"], 3), f(t1g["false_stop_buildup"], 3)), ""]
     sa = D["D"]["stats_all_frames"]
     if sa:
         L += ["Applied to all frames: D {}% ({}; limits 35-55%), {} stoppages of 2 s or more ({}; limits 80-170), "
               "{} possessions (limits {}-{}).".format(f(100 * sa["d_share"], 1), yn(D["D"]["T2"]), sa["stoppages_2s"],
                                                       yn(80 <= sa["stoppages_2s"] <= 170), sa["possessions"],
                                                       int(0.6 * 353), int(1.5 * 353)), ""]
-    L += ["**Criterion D: {}** (T1 {}, T2 {}, T3 {}).".format(yn(D["D"]["pass"]), yn(t1["pass"]), yn(D["D"]["T2"]), yn(D["D"]["T3"])), ""]
+    t23 = (yn(D["D"]["T2"]), yn(D["D"]["T3"])) if sa else ("not evaluated", "not evaluated")
+    L += ["**Criterion D: {}** (T1 {}, T2 {}, T3 {}; T2 and T3 are evaluated only if T1 passes).".format(
+        yn(D["D"]["pass"]), yn(t1["pass"]), t23[0], t23[1]), ""]
 
     L += ["## Part V: pass-chain veto", ""]
     v = D["V"]
@@ -117,10 +123,18 @@ def main():
     o = D["options"]
     L += ["## Composition of v5", "",
           "- possession configuration: {}".format(short(o["possession"])),
-          "- model: {} (`{}`), decoder: {}".format(D["D"]["model_used"], o["model"], dec(o["decoder"])),
+          "- model: {} (`{}`), decoder: {}".format(D["D"]["model_used"], o["model"] if D["changed"] else "models/dead_model.json, the v4 model", dec(o["decoder"])),
           "- model applied on: {}".format("every graded frame (R5 removed)" if o["all_frames"] else "ball gaps of 5 s or more (as v4)"),
           "- pass-chain veto: {}".format("yes" if o["veto"] else "no"),
           "- **v5 differs from v4: {}**".format("yes" if D["changed"] else "no (v4 stays final)"), ""]
+    L += ["## Notes", "",
+          "- The gradient-boosting model passed Part C and the transfer test T1 (information row above), but the "
+          "end-to-end check, a trava of the external set, failed in two of the three held-out games (DEG_BAR within "
+          "0.0004, DEG_40 lower by 0.011), so by the rule fixed beforehand the v4 configuration, model and decoder "
+          "stay. The rule was not relaxed.",
+          "- Part B failed because the configuration chosen on games 2 and 3 lost to v4 on game 1.",
+          "- Part D could not pass with the v4 model: it misses the opening of the halves (hit rate 0.43) and its "
+          "mean hit rate over the sources is 0.67 (< 0.70).", ""]
     s4, s5 = D["v4_stats"], D["v5_stats"]
     L += ["## BAR-ATH without ground truth", ""]
     L += table(["", "D share %", "possessions", "mean possession (s)", "stoppages >= 2 s", "mean stoppage (s)"],

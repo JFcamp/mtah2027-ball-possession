@@ -115,6 +115,7 @@ def main():
     t1_new, stopped_new = t1(model_dict, decoder)
     candidate_models = [("new" if kind != "L0" or e2e else "L0", model_dict, decoder, t1_new)]
     t1_l0, _ = t1(v4_model_as_l0(None), V4_DECODER)
+    t1_g1, _ = t1(m5.load(os.path.join(CACHE, "final_G1.json")), V4_DECODER)   # information only
     use_model, use_decoder, used_short = model_dict, decoder, short_dict
     use_name = kind
     if not t1_new["pass"] and t1_l0["pass"]:
@@ -160,7 +161,7 @@ def main():
                  "final_objective": b["final_objective"], "v4_objective": b["v4_objective"]},
            "C": {"passed": c["passed"], "chosen": c["chosen"], "mean_deg_auc": c["mean_deg_auc"]},
            "E2E": {"passed": e2e, "folds": d["folds"], "decoder": d["final_decoder"]},
-           "D": {"T1": t1_used, "T1_L0": t1_l0, "T1_new": t1_new, "model_used": use_name, "T2": t2, "T3": t3,
+           "D": {"T1": t1_used, "T1_L0": t1_l0, "T1_G1_info": t1_g1, "T1_new": t1_new, "model_used": use_name, "T2": t2, "T3": t3,
                  "pass": d_pass, "stats_all_frames": st_all},
            "V": veto_info, "options": options, "changed": changed, "v4_stats": st_v4, "v5_stats": st_v5}
     with open(os.path.join(CACHE, "v5_decision.json"), "w") as handle:
