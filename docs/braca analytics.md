@@ -1,6 +1,6 @@
-# branca analytics: ball possession, Phase 1 (More than a Hack 2027)
+# braca analytics: ball possession, Phase 1 (More than a Hack 2027)
 
-**Submission file:** `submissions/branca analytics.csv`, produced by pipeline **v4** with one command.
+**Submission file:** `submissions/braca analytics.csv`, produced by pipeline **v4** with one command.
 SHA-256 `1caa369c9258f02ca7337e75b5256b300205a476e1cab666e29187f9326947be`.
 **Repository:** https://github.com/JFcamp/mtah2027-ball-possession (public, no match data inside).
 
@@ -191,8 +191,8 @@ two differ on 9.07% of the graded frames. Public window: v1 macroF1 0.751, spell
 python -m venv .venv && .venv/Scripts/activate        # Python 3.12 (tested 3.12.3)
 pip install -r requirements.txt                        # numpy==2.5.4, pandas==3.1.1
 # unpack the data bundle into data/ (or set MTAH_DATA_DIR), see data/README.md, then:
-python -m src.run --out "submissions/branca analytics.csv"
-python evaluation/validate_submission.py "submissions/branca analytics.csv"
+python -m src.run --out "submissions/braca analytics.csv"
+python evaluation/validate_submission.py "submissions/braca analytics.csv"
 ```
 
 Verified on a clean clone of the public repository, with only the match data supplied: the output has
