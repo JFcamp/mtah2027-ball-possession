@@ -182,6 +182,6 @@ data into `data_external/sample-data`; the pipeline does not need that folder. T
 
 ## 10. Use of AI assistants
 
-AI programming assistants were used during development (writing and reviewing code, tests and
-documentation drafts). The team set the task, the decision rules and the data restrictions, and
-reviewed the results.
+AI assistants were used extensively throughout development: to propose the approach and the decision
+rules, and to write and review the code, tests and documentation. The team directed the work, checked
+the results against the competition rules, and is responsible for the submission.

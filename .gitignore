@@ -77,3 +77,6 @@ data_external/
 
 # the technical document in PDF is a deliverable
 !docs/branca analytics.pdf
+
+# local replays contain frame-level tracking of the licensed data
+viz/
