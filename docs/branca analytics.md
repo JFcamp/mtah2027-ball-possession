@@ -1,155 +1,187 @@
-# branca analytics: ball possession, Phase 1
+# branca analytics: ball possession, Phase 1 (More than a Hack 2027)
 
-Submitted file: `submissions/branca analytics.csv`, produced by pipeline **v4** (`python -m src.run`).
-The earlier versions are kept for the record (sections 5b-5d). Public 5-minute window, reported only
-and never used to choose anything (17 possessions, so differences below ~0.3 spellF1 are noise):
-v4 macroF1 0.748, spellF1 0.489; v1 macroF1 0.751, spellF1 0.432. Whole match v4: 353 possessions, mean
-10.5 s, 33.8% H / 24.7% A / 41.5% D of the graded frames.
+**Submission file:** `submissions/branca analytics.csv`, produced by pipeline **v4** with one command.
+SHA-256 `1caa369c9258f02ca7337e75b5256b300205a476e1cab666e29187f9326947be`.
+**Repository:** https://github.com/JFcamp/mtah2027-ball-possession (public, no match data inside).
+
+Summary. For every frame of the tactical video we output H, A, D or X. A dead-ball mask (six rules,
+one of them a small model of the players) splits the match into live spells; inside a live spell a
+control-and-hysteresis state machine decides who owns the ball. The whole-match output has 353
+possessions of 10.5 s on average, 33.8% H, 24.7% A and 41.5% D of the 158,857 graded frames. The
+public 5-minute window, reported only, gives macroF1 0.748 and spellF1 0.489 (bootstrap 5-95%:
+0.34 to 0.63 with 17 possessions, so it cannot rank anything).
 
 ## 1. Approach and why
 
-The label of a frame is decided in two steps, because the metric ranks on possessions (`spellF1`) and
-the two questions fail in different ways.
+The ranking metric counts whole possessions, so the pipeline separates two questions that fail in
+different ways.
 
-1. **Is the ball alive?** A dead-ball mask from six rules (half boundaries, ball out of the field,
-   Smart Tagging set pieces, goals, long ball gaps, a ball that stays still). Stoppages are long, so
-   they are easy once the restart is located; they split the match into live segments. In the long
-   gaps where the ball is not tracked (5 s or more), a small logistic model of the **players only**
-   (speeds, how many walk or run, team movement and compactness over 1 s and 5 s windows) decides
-   whether play is stopped.
-2. **Who has the ball in the live segments?** A control-and-hysteresis state machine. A team controls
-   the ball when its nearest player is within 1.0 m and at least 0.3 m closer than the nearest
-   opponent. Possession changes after 6 frames (0.24 s) of control by the other team or two separate
-   touches. When the ball is not seen the owner is kept.
+1. **Is the ball alive?** Stoppages are long and well anchored (ball out of the pitch, Smart Tagging
+   set pieces and goals, kick-offs), so rules locate them and their restarts. Where the ball is not
+   tracked for 5 s or more, a logistic model that sees only the players (speeds, share of players
+   walking or running, movement and compactness of each team, over 1 s and 5 s windows) decides if
+   play is stopped.
+2. **Who has the ball in a live spell?** A team controls the ball when its nearest player is within
+   1.0 m and at least 0.3 m closer than the nearest opponent. Ownership changes after 6 frames of
+   control by the other team, or after two separate touches; touches, deflections and aerial duels
+   alone never change it. If the ball is not tracked the owner is kept; a change inside a gap is
+   placed at the phase change of the Smart Tagging if there is one, else in the middle of the gap.
 
-Rules provide the structure and the definition of the task (`CHALLENGE.md`); the only learned part is
-the stopped-ball model, trained on other matches (section 3), and the possession parameters were
-chosen by validation on those matches.
+Rules give structure and match the task definition (`CHALLENGE.md`); the only learned component is
+the stopped-ball model, trained on other matches. Everything is deterministic (no random numbers).
 
 ## 2. Assets used and dropped
 
 | asset | use |
 |---|---|
-| tactical ATD (`*_tactical_atd.txt`, `.xml`) | ball and 46 player slots in metres; team of each slot from the metadata |
-| tactical Smart Tagging | set-piece and goal anchors (start, team), phase tags as a weak possession cue |
-| tactical homography | not used |
-| tactical / broadcast video | not used (the pipeline works on the tracking) |
-| broadcast ATD / homography | tried in v3 (ball fusion) and not kept: aligned to the tactical timeline by player positions only (91% of the valid broadcast frames), but it adds only 3.9 points of ball coverage |
-| Metrica sample-data, games 1-3 | other matches, used for validation and to train the stopped-ball model (section 3) |
+| tactical ATD (tracking, `.txt` + `.xml`) | ball and 46 player slots in metres; team of each slot from the metadata |
+| tactical Smart Tagging | anchors of set pieces and goals (start, team); phase tags as a weak possession cue |
+| tactical homography, both videos | not used |
+| broadcast ATD and homography | tried (v3), dropped: see section 6 |
+| Metrica sample-data games 1-3 | other matches: validation and training of the stopped-ball model (section 4) |
 
-The ATD `speed` field is not used (checked against positions: same unit, ratio 0.99; positions give a
-smoothing we control).
+The ATD `speed` field is not used: it was checked against positions (same unit, median ratio 0.99)
+and positions give a smoothing we control.
 
-## 3. Training data
+## 3. How the public ground truth was used
 
-- **Source**: the three public sample games of Metrica Sports,
-  https://github.com/metrica-sports/sample-data (Sample_Game_1, 2 and 3; two in the CSV format, one
-  in the EPTS FIFA format). They are other matches, not BAR-ATH. The data is downloaded to
-  `data_external/` (git-ignored, not redistributed).
-- **Who labelled**: nobody by hand on our side. The tracking is the data provider's corrected tracking
-  and the events are the provider's. The labels used are derived by code (`src/external.py`):
-  *stopped* = the ball is absent from the corrected tracking inside a period; *H/A* = the team of the
-  latest ball event (pass, shot, recovery, carry, set piece) of the live spell.
-- **How much**: 3 games, 429,920 graded frames at 25 fps (about 4.8 hours), 37.4% stopped.
-- **What for**: (a) the stopped-ball model (logistic regression, 20 player features, balanced classes,
-  Newton iterations, no randomness) is trained on all three games with the *stopped* label, and the
-  trained weights are in `models/dead_model.json` (regenerate with `python scripts/train_dead_model.py`
-  after cloning the sample data); (b) the possession parameters (control radius, margin, minimum
-  control, two touches, back-dating, minimum possession) were selected on these games, choosing on two
-  and testing on the third (324 configurations, with the true ball and with 40% of the live-play ball
-  frames erased in long gaps); (c) validation of the stopped-ball model against the pace rule it
-  replaces, with the same leave-one-game-out scheme.
-- **Not used**: no label, event or correction of BAR-ATH, nothing from its private ground truth, and
-  the public 5 minutes were never used to select a parameter or a version; they are only reported.
-- Definitions differ from `CHALLENGE.md` in details (events are touches, not necessarily controlled
-  possession; the dead ball starts when the corrected tracking drops the ball, which can be seconds
-  after it leaves the pitch). See `docs/external_data.md`.
+(i) To check that the pipeline is aligned and well formed. (ii) One error analysis, read to
+understand how cases are labelled (`docs/error_analysis_v1.md`, on v1). It showed that most missed
+dead-ball frames have the ball visible and moving (67% with nobody controlling it, 23% with a team
+controlling it) and that possession switches are mostly displaced by 1-5 s. That analysis motivated
+**which mechanisms were put into the calibration grid** (control radius, margin, minimum control,
+two touches, back-dating, minimum possession; a model for stopped play). (iii) **No threshold,
+configuration or version was chosen with it.** Every choice was made on the external games with
+decision rules fixed beforehand; the public score is only reported.
 
-## 4. Possession rules implemented (v4)
+## 4. Training data
 
-- **Dead ball (`src/dead_ball.py`)**: R1 start of each half until the kick-off; R2 ball more than
-  0.5 m outside the lines until play restarts (ball back inside and moving above 2 m/s for 0.5 s);
-  R3 set pieces: the tag start sits in the middle of the stoppage, so D runs from the last live
-  frame before it (ball moving, or players jogging) to the restart; R4 goals: from the goal to the
-  restart of the kick-off; R5 ball unseen for at least 5 s: D where the stopped-ball model gives
-  P(stopped) >= 0.5 (v1 used the players' median speed below 1.4 m/s); R6 ball still for at least
-  2 s. D runs shorter than 2 s are dropped.
-- **Possession (`src/possession.py`)**: control radius 1.0 m with 0.3 m margin over the opponent;
-  switch after 6 frames of control or two touches within 3 s; the switch is placed when the evidence
-  is complete (no back-dating to the first touch); ball unseen: keep the owner, and place a change
-  that happens inside a gap at the phase change if there is one, else in the middle of the gap; after
-  a restart the taker is the Team of the set piece, or the first team to control the ball when it is
-  N/A (throw-ins, first kick-off).
-- **Loose balls, challenges, restarts**: a touch, a deflection or an aerial duel does not change the
-  owner; a possession shorter than 25 frames (1 s) is absorbed by its neighbour
-  (`src/postprocess.py`).
+- **Source:** the three public sample games of Metrica Sports,
+  https://github.com/metrica-sports/sample-data (Sample_Game_1, 2, 3). Other matches, not BAR-ATH.
+- **Who labelled:** Metrica Sports (corrected tracking and event data). We labelled nothing by hand;
+  our labels are derived by code (`src/external.py`): *stopped* = the corrected tracking has no ball
+  inside a period; *H/A* = team of the latest ball event (pass, shot, recovery, carry, set piece) of the
+  live spell, held until the opponent has a ball event of its own.
+- **How much:** 3 games, 429,920 graded frames at 25 fps (about 4.8 hours), 37.4% stopped.
+- **What for:** (a) train the stopped-ball model on the three games (regularised logistic regression
+  in numpy, 20 player features, balanced classes, 25 Newton steps); weights in `models/dead_model.json`;
+  (b) select the possession configuration (324 configurations; chosen on two games, tested on the third,
+  with the true ball and with 40% of the live-play ball frames erased in long gaps, E2 gap
+  distribution); (c) compare the model with the pace rule it replaces, leave-one-game-out.
+- **Definition differences from `CHALLENGE.md`:** (1) possession here is "last ball event" (a touch),
+  not controlled possession; a recovery lost at once counts as a change. (2) The external tracking is
+  corrected, BAR-ATH's is automatic: noisier positions and speeds. (3) In the external games the dead
+  ball starts when the corrected tracking drops the ball, often after it left the pitch (the ball is
+  still present 1-3 s after a BALL OUT event in 33-54% of the cases), whereas BAR-ATH's ground truth
+  marks dead ball from the tracking. (4) No Smart Tagging there, so the logic ran without restart
+  teams. (5) Pitch 105 x 68 m instead of 105.3 x 68.
+- **Checks of the labels** (`docs/external_data.md`): the ball is present in 100% of the frames of
+  passes, shots and carries; absent in 95-98% of the 1-3 s before a restart; the official baseline logic
+  scores spellF1 0.09-0.13 (raw) and 0.41-0.46 (smooth50) on them, the same order as on BAR-ATH.
 
-Thresholds and their justification are in the module docstrings (`src/ball.py`, `src/features.py`,
-`src/dead_ball.py`, `src/possession.py`, `src/postprocess.py`); the values changed in v4 and why are in
-`docs/report_v4.md`.
+## 5. Rules and thresholds of v4
 
-## 5. Limitations
+Dead ball: R1 from the start of each half to the kick-off restart; R2 ball more than 0.5 m outside the
+lines until it is back inside and moving; R3 set pieces: the tag start lies in the middle of the
+stoppage, so D runs from the last live frame before it to the restart; R4 goal to the kick-off restart;
+R5 ball untracked for 5 s or more: D where the model says P(stopped) >= 0.5 (v1: players' median speed
+< 1.4 m/s); R6 ball still for 2 s. Dead runs shorter than 2 s are dropped. Origin: **P** physical,
+**F** football reasoning, **D** tracking diagnostic of BAR-ATH (no labels), **X** external calibration.
 
-- The ball is missing in 41% of graded frames, mostly in gaps longer than 5 s. Inside them the owner is
-  kept and dead ball is inferred from the players only, with a model that reaches AUC 0.92-0.95 on
-  other games, not perfect.
-- The external games have corrected tracking and event-based labels; BAR-ATH has automatic tracking
-  (noisier positions and speeds) and its labels come from corrected tracking. The model and the
-  possession parameters were validated on the first kind of data and applied to the second. A control
-  radius of 1.0 m, the lowest of the grid, was chosen; with noisier positions it may be too tight.
-  The best values of three parameters lie at the edge of the grid, which was not extended.
-- The stoppage start is inferred from an anchor that is itself automatic (Smart Tagging), and the
-  restart is located from the ball only when it is seen. Restart times can be off by seconds.
-- The Smart Tagging `Team` of corners is not confirmed by the tracking (the first controller after a
-  corner is the tagged team in 3 of 10 cases); it is used as given.
-- With 17 possessions the public window cannot rank versions; the choices were made on other games.
+| parameter | value | origin |
+|---|---|---|
+| ball: impossible jump | > 35 m/s between samples | P (fastest kicks 36-38 m/s) |
+| ball: minimum run kept | 5 samples (0.2 s) | P |
+| ball: interpolated gap | <= 25 frames (1 s) | F (a pass lasts 0.5-1.5 s) |
+| ball: smoothing | 5 frames (0.2 s) | P (tracking noise vs. kick duration) |
+| player speed: central difference, cap | +/-2 frames, 12 m/s | P |
+| activity smoothing, minimum tracked | 1 s, 6 players | F |
+| ball out margin | 0.5 m | P (radius 0.11 m + tracking noise) |
+| restart: motion, duration | > 2 m/s for 0.5 s (onset only) | P (walking <= 2 m/s, kicks > 5 m/s) |
+| restart search, fallback | 8 s, 3.5 s after the tag start | F, D (kick-off tag measured) |
+| R3 look-back cap | 8 s | D (ball leaves ~3 s before the tag start) |
+| live frame (R3) | ball > 3 m/s inside, or player pace >= 2 m/s | P, F |
+| R2 maximum stoppage | 40 s | F (throw-in, corner, goal kick: 10-40 s) |
+| R4 window around the goal tag | -2 s to +15 s | D |
+| R5 minimum ball gap | 5 s | F |
+| model decision, ridge, Newton steps | P >= 0.5, 1.0, 25 | X (balanced classes; fixed budget) |
+| features: walking, running pace | < 1.4 m/s, > 4 m/s | P |
+| features: windows, acceleration span | 1 s and 5 s, +/-5 frames | F |
+| R6: still ball, duration | < 0.5 m/s for 2 s | F |
+| minimum dead run | 2 s | F |
+| control radius | 1.0 m | X (grid 1.0, 1.5, 2.0) |
+| margin over the opponent | 0.3 m | X (grid 0, 0.3, 0.6; ~tracking noise) |
+| minimum control to switch | 6 frames | X (grid 6, 12, 25) |
+| two touches | on, within 3 s | X (grid on/off), F |
+| back-dating to the first touch | off | X (grid on/off) |
+| minimum possession | 25 frames (1 s) | X (grid 25, 38, 75) |
+| control gap merged | 5 frames (0.2 s) | P (occlusion, jitter) |
 
-## 5b. v2 attempted and discarded
+## 6. Attempts discarded
 
-v2 replaced the pace rule R5 and the fixed look-back / stoppage caps by a learned live/stopped model:
-algorithmic pseudo-labels (stopped: ball out for 1 s, ball still for 2 s, set-piece tag start to
-restart, goal to kick-off, opening of each half; live: ball inside, moving, someone controlling it), a
-logistic regression on player-only features and a two-state Viterbi HMM with football-duration
-transitions (stopped 25 s, live 40 s on average). The decision rule was fixed beforehand: replace v1
-only if the model beats R5 on the pseudo-labels of the held-out half in both directions. It lost in
-one direction (AUC 0.898 vs 0.909), so v1 stayed. The idea survived in v4, trained on real labels
-from other games. Report: `docs/report_v2.md`.
+- **v2, learned live/stopped model on algorithmic pseudo-labels of BAR-ATH** (stopped: ball out, still
+  ball, set piece to restart; live: ball moving under control; no human label) with an HMM. Rule fixed beforehand: replace v1 only if the model beats the pace
+  rule on the held-out half in both directions. It lost in one (AUC 0.898 vs 0.909, balanced accuracy
+  0.829 vs 0.833). The idea returned in v4 with real labels from other games.
+- **v3, broadcast ball fusion.** Broadcast frames were aligned to tactical frames by player positions only
+  (91.1% of the broadcast frames with a valid homography; offsets constant to a few frames, 4014 and 26920;
+  players agree to a median of 0.29 m). Rule: median ball distance <= 2 m and p90 <= 5 m, and ball
+  coverage +5 points. Median 0.79 m, but p90 5.94 m, and coverage rose only from 59.3% to 63.2% (+3.9),
+  because the broadcast tracker loses the ball where the tactical one does.
 
-## 5c. Error analysis and broadcast ball fusion (v3), discarded
+## 7. Results
 
-`docs/error_analysis_v1.md` compares v1 with the public 5 minutes (read only to understand the cases,
-no threshold changed). The missed dead-ball frames are mostly frames where the ball is visible and
-moving but nobody controls it (67%) or a team controls it (23%); possession switches are missed or
-shifted mostly because the new team controlled the ball earlier or later than the predicted switch.
-v3 completed the tactical ball with the broadcast ball, aligned to the tactical frames by player
-positions only (offsets constant to within a few frames, players agree to a median of 0.29 m). The
-rule fixed beforehand was not met: the co-visible ball p90 was 5.94 m (limit 5) and the ball coverage
-rose only 3.9 points (limit 5). Report: `docs/report_v3.md`; code: `src/broadcast.py`, `src/align.py`,
-`src/fusion.py`.
+External games, true dead-ball mask (spellF1, game 1 / 2 / 3):
 
-## 5d. Calibration on other games (v4), adopted
+| | true ball | 40% of live ball erased |
+|---|---|---|
+| v1 configuration | 0.752 / 0.755 / 0.736 | 0.626 / 0.650 / 0.605 |
+| selected on the other two games | 0.810 / 0.794 / 0.756 | 0.660 / 0.679 / 0.607 |
 
-Rule fixed beforehand, using only the external games: adopt the new possession configuration if it
-beats v1 in all three held-out games with and without artificial ball gaps (it did: spellF1 0.810 vs
-0.752, 0.794 vs 0.755, 0.756 vs 0.736 with the true ball; 0.660 vs 0.626, 0.679 vs 0.650, 0.607 vs
-0.605 with gaps), and adopt the stopped-ball model if it beats R5 on AUC and balanced accuracy in all
-three held-out games (it did: AUC 0.917, 0.950, 0.950 vs 0.867, 0.898, 0.926). BAR-ATH plausibility
-without ground truth: D 41.5% of the graded frames, 353 possessions against 339 for v1. Details,
-including each component alone (v4b, v4c): `docs/report_v4.md`.
+Stopped-ball model vs. the pace rule, leave-one-game-out, AUC: 0.917 / 0.950 / 0.950 against
+0.867 / 0.898 / 0.926; balanced accuracy 0.860 / 0.893 / 0.877 against 0.806 / 0.816 / 0.854.
 
-## 6. Reproduction
+BAR-ATH, whole match (no ground truth): v1 339 possessions, 40.7% D; v4 353 possessions, 41.5% D; the
+two differ on 9.07% of the graded frames. Public window: v1 macroF1 0.751, spellF1 0.432; v4 macroF1
+0.748, spellF1 0.489 (reported only).
+
+## 8. Limitations
+
+- The ball is missing in 41% of the graded frames, mostly in gaps over 5 s. There the owner is kept and
+  stopped play is inferred from the players only (AUC 0.92-0.95 on other games). With 40% of the live
+  ball erased the external spellF1 drops by about 0.10-0.13.
+- **One test of the possession selection passed by a minimal margin:** game 3 with erased ball, 0.6073
+  against 0.6047 for v1 (the other five comparisons gained 0.02-0.06).
+- **Values at the edge of the grid:** control radius 1.0 m, minimum control 6 frames and minimum
+  possession 25 frames are the lowest values tried; the grid was not extended, so the optimum may lie
+  beyond.
+- **Transfer risk:** the radius of 1.0 m and the model were validated on corrected tracking; BAR-ATH is
+  automatic and noisier, so a 1.0 m radius may be too tight there. We did not test it with simulated noise.
+- The external labels are event-based, the BAR-ATH ones tracking-based (section 4); the model's stopped
+  label (ball absent) also differs from BAR-ATH's dead ball.
+- Stoppage starts rely on the Smart Tagging, itself automatic; the restart is found from the ball only
+  when it is seen. The Smart Tagging team of corners agrees with the first controller in 3 of 10 cases.
+- With 17 possessions the public window cannot separate versions.
+
+## 9. Reproduction
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate        # Windows; use bin/activate elsewhere
-pip install -r requirements.txt
-# unpack the data bundle into data/ (see data/README.md), then:
+python -m venv .venv && .venv/Scripts/activate        # Python 3.12 (tested 3.12.3)
+pip install -r requirements.txt                        # numpy==2.5.4, pandas==3.1.1
+# unpack the data bundle into data/ (or set MTAH_DATA_DIR), see data/README.md, then:
 python -m src.run --out "submissions/branca analytics.csv"
 python evaluation/validate_submission.py "submissions/branca analytics.csv"
 ```
 
-The command is deterministic: two runs give byte-identical CSVs (checked by `tests/test_pipeline.py`).
-The tracking is cached in `data/cache/` after the first run. The stopped-ball model is in
-`models/dead_model.json` (committed); it can be regenerated from the public sample games:
-`git clone https://github.com/metrica-sports/sample-data data_external/sample-data` and
-`python scripts/train_dead_model.py`. `python -m src.run --version v1` reproduces the earlier safety
-submission. Tests: `pip install -r requirements-dev.txt && python -m pytest`.
+Verified on a clean clone of the public repository, with only the match data supplied: the output has
+the SHA-256 above and equals the committed file byte for byte (also without the tracking cache).
+`models/dead_model.json` (SHA-256
+`93587ee2b9798ed77e90437125fc817072b4828d6ed9a41c7da3e16c93f888ff`) is regenerated identically by `python scripts/train_dead_model.py` after cloning the sample
+data into `data_external/sample-data`; the pipeline does not need that folder. Tests:
+`pip install -r requirements-dev.txt && python -m pytest`. Reports: `docs/report_v1.md` to `report_v4.md`.
+
+## 10. Use of AI assistants
+
+AI programming assistants were used during development (writing and reviewing code, tests and
+documentation drafts). The team set the task, the decision rules and the data restrictions, and
+reviewed the results.

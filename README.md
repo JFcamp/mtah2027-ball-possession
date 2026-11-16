@@ -1,7 +1,10 @@
 # branca analytics: Ball Possession (More than a Hack 2027, Phase 1)
 
 For every frame of the tactical video of BAR-ATH, one label: `H` / `A` (team in possession),
-`D` (dead ball) or `X` (not graded). Rule-based pipeline, no training data, no hand labels.
+`D` (dead ball) or `X` (not graded). Rule-based pipeline plus one small stopped-ball model trained on other matches (public Metrica sample
+games, see below); no hand labels, no BAR-ATH labels.
+Expected SHA-256 of `submissions/branca analytics.csv`:
+`1caa369c9258f02ca7337e75b5256b300205a476e1cab666e29187f9326947be`.
 The challenge statement is in [README_official.md](README_official.md) and the other official
 documents; the technical document is [docs/branca analytics.md](docs/branca%20analytics.md).
 
@@ -57,6 +60,15 @@ public Metrica sample games (regenerate: clone https://github.com/metrica-sports
 | `scripts/` | diagnostics and reports (`docs/diagnostics_e2.md`, `docs/report_v*.md`) |
 | `tests/` | `python -m pytest` |
 | `evaluation/` | official scorer (public 5 minutes, only used to report) |
+
+## External data and acknowledgement
+
+The stopped-ball model (`models/dead_model.json`) was trained, and the possession parameters were
+validated, on the public sample games of **Metrica Sports**,
+https://github.com/metrica-sports/sample-data (Sample_Game_1, 2 and 3; tracking and events by Metrica
+Sports, anonymised). We thank Metrica Sports for releasing them. They are not redistributed here
+(`data_external/` is git-ignored); `python scripts/train_dead_model.py` regenerates the model after
+cloning that repository into `data_external/sample-data`. The pipeline itself does not need them.
 
 ## Rules followed
 
