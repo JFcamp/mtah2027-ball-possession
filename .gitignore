@@ -74,3 +74,6 @@ evaluation/results/branca*.csv
 
 # external validation data (public Metrica sample-data), never committed
 data_external/
+
+# the technical document in PDF is a deliverable
+!docs/branca analytics.pdf
