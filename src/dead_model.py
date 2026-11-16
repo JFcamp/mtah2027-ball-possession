@@ -81,3 +81,18 @@ def scores(pred_stopped: np.ndarray, y: np.ndarray) -> dict:
     tpr = float(pred_stopped[y == 1].mean())
     tnr = float((~pred_stopped[y == 0]).mean())
     return {"accuracy": acc, "balanced_accuracy": (tpr + tnr) / 2.0}
+
+
+def save(model: Model, path: str, meta: dict = None) -> None:
+    import json
+    payload = {"mean": model.mean.tolist(), "scale": model.scale.tolist(),
+               "weights": model.weights.tolist(), "meta": meta or {}}
+    with open(path, "w") as handle:
+        json.dump(payload, handle, indent=1, sort_keys=True)
+
+
+def load(path: str) -> Model:
+    import json
+    with open(path) as handle:
+        payload = json.load(handle)
+    return Model(np.array(payload["mean"]), np.array(payload["scale"]), np.array(payload["weights"]))

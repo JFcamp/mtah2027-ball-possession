@@ -14,6 +14,7 @@ from typing import NamedTuple
 import numpy as np
 
 from . import ball as ballmod
+from . import calibration
 from . import dead_ball as db
 from . import dead_hmm as hmm
 from . import dead_model as dmodel
@@ -38,7 +39,7 @@ class Pipeline(NamedTuple):
     extra: dict = {}
 
 
-def build(version: str = "v1", use_cache: bool = True) -> Pipeline:
+def build(version: str = "v4", use_cache: bool = True) -> Pipeline:
     """v1: dead-ball rules R1-R6. v2: R5 and the look-back / stoppage caps are replaced by a model
     of live / stopped play (player features, trained on pseudo-labels) decoded with an HMM."""
     tracking = sio.load_tracking(use_cache=use_cache)
@@ -55,15 +56,53 @@ def build(version: str = "v1", use_cache: bool = True) -> Pipeline:
     intervals = sio.load_smart_tagging()
     track = ballmod.clean_ball(tracking.ball_xy)
     features, table = feat.compute_features(tracking, track, intervals)
-    dead = db.build(track, features, intervals)
+    cfg = None
+    r5 = None
+    if version in ("v4", "v4b", "v4c"):
+        # v4 = v1 + (a) the possession configuration validated on the external games and
+        #           (b) a stopped-ball model, trained on them, in place of the pace test of R5.
+        # v4b / v4c apply only (a) / only (b).
+        if version in ("v4", "v4c"):
+            r5 = _model_stopped(tracking)
+        if version in ("v4", "v4b"):
+            cfg = V4_POSSESSION
+    dead = db.build(track, features, intervals, r5)
     extra = {"dead_v1": dead, "fused": fused}
     if version == "v2":
         dead, extra = _dead_v2(tracking, track, features, intervals, dead)
-    elif version not in ("v1", "v3"):
+    elif version not in ("v1", "v3", "v4", "v4b", "v4c"):
         raise ValueError("unknown version {!r}".format(version))
-    pre, segments = pos.assign(dead, features, track)
-    labels = post.finalize(pre, sio.graded_mask())
+    if cfg is None:
+        pre, segments = pos.assign(dead, features, track)
+        labels = post.finalize(pre, sio.graded_mask())
+    else:
+        with calibration.configured(cfg):
+            pre, segments = pos.assign(dead, features, track)
+        labels = post.finalize(pre, sio.graded_mask(), cfg["min_poss"])
     return Pipeline(labels, pre, track, features, table, dead, segments, extra)
+
+
+# Possession configuration chosen on the external games (scripts/possession_sweep.py, selection by
+# cross-game validation, docs/report_v4.md): control radius 1.0 m, margin 0.3 m, switch after 6 frames of
+# control or two touches, switch placed when the evidence is complete (no back-dating), minimum
+# possession 25 frames.
+V4_POSSESSION = {"r_ctrl": 1.0, "margin": 0.3, "min_control": 6, "two_touch": True,
+                 "backdate": False, "min_poss": 25}
+MODEL_PATH = os.path.join(sio.ROOT, "models", "dead_model.json")
+MODEL_THRESHOLD = 0.5   # P(stopped) >= 0.5: the model is trained with balanced classes
+
+
+def _model_stopped(tracking) -> np.ndarray:
+    """[N] bool: the model (src/dead_model.py, models/dead_model.json) says stopped, from the
+    players only. Trained on the external games; features as in src/features_players.py, without
+    the number of tracked players."""
+    x, names = fplayers.compute(tracking.players_xy, tracking.team_of_slot)
+    keep = [i for i, n in enumerate(names) if not n.startswith("n_tracked")]
+    p = dmodel.predict_proba(dmodel.load(MODEL_PATH), x[:, keep])
+    return p >= MODEL_THRESHOLD
+
+
+
 
 
 def _dead_v2(tracking, track, features, intervals, dead_v1):
@@ -99,7 +138,7 @@ def write_csv(path: str, labels: np.ndarray) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, help="CSV to write, e.g. submissions/v1.csv")
-    parser.add_argument("--version", default="v1", choices=("v1", "v2", "v3"), help="pipeline generation")
+    parser.add_argument("--version", default="v4", choices=("v1", "v2", "v3", "v4", "v4b", "v4c"), help="pipeline generation")
     args = parser.parse_args(argv)
     result = build(args.version)
     write_csv(args.out, result.labels)

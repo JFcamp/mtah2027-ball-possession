@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--csv", default=os.path.join(ROOT, "submissions", "v1.csv"))
     args = parser.parse_args()
 
-    result = runner.build()
+    result = runner.build("v1")
     labels = result.labels
     blocks = sio.half_blocks()
     L = ["# Report v1", "",

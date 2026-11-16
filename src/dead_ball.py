@@ -122,7 +122,9 @@ def _side(tag, sides):
     return sides.get(tag)
 
 
-def build(track, features: feat.Features, intervals) -> DeadBall:
+def build(track, features: feat.Features, intervals, r5_stopped=None) -> DeadBall:
+    """Dead-ball mask. `r5_stopped` ([N] bool, optional) replaces the pace test of rule R5: inside a
+    ball gap of at least 5 s a frame is dead where it is True (v4 passes a model's decision)."""
     n = sio.N_FRAMES
     graded = sio.graded_mask()
     blocks = sio.half_blocks()
@@ -212,7 +214,10 @@ def build(track, features: feat.Features, intervals) -> DeadBall:
         for a, b in runs(seg):
             if b - a >= GAP_MIN:
                 lo, hi = first + a, first + b
-                low = np.isfinite(act[lo:hi]) & (act[lo:hi] < A_WALK)
+                if r5_stopped is None:
+                    low = np.isfinite(act[lo:hi]) & (act[lo:hi] < A_WALK)
+                else:
+                    low = r5_stopped[lo:hi]
                 masks["R5"][lo:hi] = low
 
     # ---- R6: ball stopped inside the field -----------------------------------------------------

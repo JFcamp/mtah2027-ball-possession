@@ -42,11 +42,12 @@ def merge_short_possessions(labels: np.ndarray, min_len: int = MIN_POSSESSION) -
         labels[a:b] = max(candidates)[1] if candidates else pos.D
 
 
-def finalize(labels: np.ndarray, graded: np.ndarray) -> np.ndarray:
+def finalize(labels: np.ndarray, graded: np.ndarray, min_len=None) -> np.ndarray:
     """Merge short possessions inside each graded block and force X outside the blocks."""
+    min_len = MIN_POSSESSION if min_len is None else min_len
     out = np.full(len(labels), pos.X, dtype=np.int8)
     edges = np.flatnonzero(np.diff(np.concatenate(([0], graded.astype(np.int8), [0]))))
     for lo, hi in zip(edges[::2], edges[1::2]):
-        out[lo:hi] = merge_short_possessions(labels[lo:hi])
+        out[lo:hi] = merge_short_possessions(labels[lo:hi], min_len)
     out[~graded] = pos.X
     return out

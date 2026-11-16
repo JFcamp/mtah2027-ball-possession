@@ -32,7 +32,7 @@ def test_no_short_possessions(result):
     starts, stops = np.concatenate(([0], edges)), np.concatenate((edges, [len(labels)]))
     for a, b in zip(starts, stops):
         if labels[a] in (pos.H, pos.A):
-            assert b - a >= post.MIN_POSSESSION
+            assert b - a >= runner.V4_POSSESSION["min_poss"]
 
 
 def test_same_input_same_bytes(result, tmp_path):
@@ -43,6 +43,13 @@ def test_same_input_same_bytes(result, tmp_path):
     assert digest(first) == digest(second)
     assert first.read_text().splitlines()[0] == "frame,label"
     assert len(first.read_text().splitlines()) == sio.N_FRAMES + 1
+
+
+def test_v1_still_reproduces_the_safety_submission(tmp_path):
+    path = tmp_path / "v1.csv"
+    runner.write_csv(str(path), runner.build("v1").labels)
+    assert hashlib.sha256(path.read_bytes()).hexdigest().upper() == (
+        "27B67FAE3936C2D42E611E25E448D9AEF7759FD7A4B889CE472CA7B4C1EEFB4F")
 
 
 def test_v2_is_deterministic_and_well_formed(tmp_path):

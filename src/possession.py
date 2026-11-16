@@ -41,6 +41,8 @@ CONTEST_MARGIN = 0.3
 MERGE_GAP = 5
 SWITCH_MIN = 12
 TOUCH_WINDOW = 75
+TWO_TOUCH = True   # switch also on two separate touches (v1 behaviour)
+BACKDATE = True    # back-date a switch to the first control frame (v1 behaviour)
 
 H, A, D, X = 0, 1, 2, 3  # label codes
 
@@ -127,15 +129,18 @@ def run_segment(lo, hi, control, present, phase_team, init_owner):
         if team == owner:
             pending = None
             continue
-        if pending is not None and pending[0] == team and s - pending[2] <= TOUCH_WINDOW:
-            seq_start, confirmed = pending[1], True
+        if TWO_TOUCH and pending is not None and pending[0] == team and s - pending[2] <= TOUCH_WINDOW:
+            seq_start, confirmed, confirm_at = pending[1], True, s
         else:
-            seq_start, confirmed = s, (e - s + 1) >= SWITCH_MIN
+            seq_start, confirmed, confirm_at = s, (e - s + 1) >= SWITCH_MIN, s + SWITCH_MIN - 1
         if not confirmed:
             pending = (team, s, e)
             continue
         floor = switches[-1][0] if switches else lo
-        frame, in_gap = place_switch(seq_start, team, lo, present, phase_team, floor)
+        # BACKDATE: the switch starts at the first control frame of the new team's sequence; when
+        # off, at the moment the evidence was complete (second touch, or 0.5 s of control).
+        frame, in_gap = place_switch(seq_start if BACKDATE else confirm_at, team, lo, present,
+                                     phase_team, floor)
         switches.append((frame, team))
         n_gap += int(in_gap)
         owner = team

@@ -33,27 +33,32 @@ EPS = 1e-6
 LIVE, STOPPED = 0, 1
 
 
-def viterbi(p_stop: np.ndarray, hard: np.ndarray) -> np.ndarray:
+def viterbi(p_stop: np.ndarray, hard: np.ndarray, expected_stop_s=None, expected_live_s=None,
+            temper=None) -> np.ndarray:
     """Most likely state path.
 
     p_stop: [T] model P(stopped), NaN = no evidence. hard: [T] int, -1 free, 0 live, 1 stopped.
     Returns [T] bool, True where stopped.
     """
+    es = EXPECTED_STOP_S if expected_stop_s is None else expected_stop_s
+    el = EXPECTED_LIVE_S if expected_live_s is None else expected_live_s
+    tp = TEMPER if temper is None else temper
+    p_stop_to_live, p_live_to_stop = 1.0 / (es * FPS), 1.0 / (el * FPS)
     t_len = len(p_stop)
     p = np.clip(np.where(np.isfinite(p_stop), p_stop, 0.5), EPS, 1 - EPS)
-    emit = np.stack([np.log(1 - p), np.log(p)], axis=1) * TEMPER
+    emit = np.stack([np.log(1 - p), np.log(p)], axis=1) * tp
     emit[hard == LIVE, STOPPED] = -np.inf
     emit[hard == STOPPED, LIVE] = -np.inf
 
-    stay = {LIVE: np.log(1 - P_LIVE_TO_STOP), STOPPED: np.log(1 - P_STOP_TO_LIVE)}
-    move = {LIVE: np.log(P_LIVE_TO_STOP), STOPPED: np.log(P_STOP_TO_LIVE)}  # from the key state
+    stay = {LIVE: np.log(1 - p_live_to_stop), STOPPED: np.log(1 - p_stop_to_live)}
+    move = {LIVE: np.log(p_live_to_stop), STOPPED: np.log(p_stop_to_live)}  # from the key state
     # log transition matrix [from, to]
     trans = np.array([[stay[LIVE], move[LIVE]], [move[STOPPED], stay[STOPPED]]])
 
     score = np.empty((t_len, 2))
     back = np.zeros((t_len, 2), dtype=np.int8)
     # Start: the opening of a half is a stoppage (kick-off); the prior is the stationary one.
-    start = np.log(np.array([EXPECTED_LIVE_S, EXPECTED_STOP_S]) / (EXPECTED_LIVE_S + EXPECTED_STOP_S))
+    start = np.log(np.array([el, es]) / (el + es))
     score[0] = start + emit[0]
     for t in range(1, t_len):
         cand = score[t - 1][:, None] + trans          # [from, to]
