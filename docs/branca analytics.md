@@ -204,6 +204,8 @@ data into `data_external/sample-data`; the pipeline does not need that folder. T
 
 ## 10. Use of AI assistants
 
-AI assistants were used extensively throughout development: to propose the approach and the decision
-rules, and to write and review the code, tests and documentation. The team directed the work, checked
-the results against the competition rules, and is responsible for the submission.
+AI assistants were used for two purposes: fixing bugs in the code and supporting the team's strategic
+decisions about which path to take. In line with the competition rules, no videos, datasets,
+confidential information or other restricted materials provided for the competition, nor any extracts
+of them, were uploaded, disclosed or otherwise made available to any AI assistant. The team checked
+the results against the competition rules and is responsible for the submission.
